@@ -30,33 +30,37 @@ module.exports = (robot) ->
     tcmd = command.replace /;/g, " "
     tcmd = tcmd.replace /&&/g, " "
     tcmd = tcmd.replace /`/g, " "
+    tcmd = tcmd.replace /\$/g, " "
+    tmcd = tcmd.replace /\=/g, " "
 
     @wexec "which #{tcmd}", (error, stdout, stderr) ->
+      if stdout.length == 0 then return
       wrets = stdout.split("\n")
-      for wret in wrets
 
-        # コマンドが登録されているか確認
+      # コマンドが登録されているか確認
+      for wret in wrets
         cmd = wret.split("/").pop()
         unless cmd.length == 0 or enabled.indexOf(cmd) >= 0
           msg.send "#{cmd}コマンドは許可がありません。"
           return
 
-        @exec = require('child_process').exec
-        @exec command, (error, stdout, stderr) ->
-          if error?
-            msg.send "#{command}\n#{error}"
-          else
-            msg.send "#{command}\n#{stdout}"
+      # コマンド実行
+      @exec = require('child_process').exec
+      @exec command, (error, stdout, stderr) ->
+        msg.send "call"
+        if error?
+          msg.send "$ #{command}\n#{error}"
+        else
+          msg.send "$ #{command}\n#{stdout}"
 
   #
   # コマンド追加
   #
   robot.respond /sh_add (.*)$/i, (msg) ->
-    @exec = require('child_process').exec
-    command = msg.match[1]
     cmds = msg.match[1].split(" ")
 
-    @exec "which #{command}", (error, stdout, stderr) ->
+    @exec = require('child_process').exec
+    @exec "which #{msg.match[1]}", (error, stdout, stderr) ->
 
       # コマンドの最大文字列長を取得
       maxlen = 0
@@ -72,7 +76,7 @@ module.exports = (robot) ->
       enabled = if robot.brain.data.sh["enabled"]? then robot.brain.data.sh["enabled"] else []
 
       for cmd, i in cmds
-        if cmd.length == 0 or lines[i].length == 0 then continue
+        if cmd.length == 0 then continue
 
         # 出力を整形
         cmdname = "#{cmd + Array(maxlen).join ' '}".slice(0, maxlen)
@@ -119,5 +123,5 @@ module.exports = (robot) ->
       result += "#{cmd}\n"
 
     if result.length == 0
-      result = "ぷーん"
+      result = "ないぼっと"
     msg.send result
