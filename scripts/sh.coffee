@@ -19,13 +19,34 @@ module.exports = (robot) ->
   # コマンド実行
   #
   robot.respond /sh (.*)$/i, (msg) ->
-    @exec = require('child_process').exec
+    robot.brain.data.sh = {} if !robot.brain.data.sh
+    enabled = if robot.brain.data.sh["enabled"]? then robot.brain.data.sh["enabled"] else []
+
+    @wexec = require('child_process').exec
     command = "#{msg.match[1]}"
-    @exec command, (error, stdout, stderr) ->
-      if error?
-        msg.send "#{command}\n#{error}"
-      else
-        msg.send "#{command}\n#{stdout}"
+    cmds    = command.split(" ")
+
+    # whichコマンドでコマンドか確認
+    tcmd = command.replace /;/g, " "
+    tcmd = tcmd.replace /&&/g, " "
+    tcmd = tcmd.replace /`/g, " "
+
+    @wexec "which #{tcmd}", (error, stdout, stderr) ->
+      wrets = stdout.split("\n")
+      for wret in wrets
+
+        # コマンドが登録されているか確認
+        cmd = wret.split("/").pop()
+        unless cmd.length == 0 or enabled.indexOf(cmd) >= 0
+          msg.send "#{cmd}コマンドは許可がありません。"
+          return
+
+        @exec = require('child_process').exec
+        @exec command, (error, stdout, stderr) ->
+          if error?
+            msg.send "#{command}\n#{error}"
+          else
+            msg.send "#{command}\n#{stdout}"
 
   #
   # コマンド追加
