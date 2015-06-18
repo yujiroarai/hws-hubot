@@ -19,12 +19,109 @@ module.exports = (robot) ->
   # コマンド実行
   #
   robot.respond /sh (.*)$/i, (msg) ->
-    @exec = require('child_process').exec
-    command = "#{msg.match[1]}"
-    msg.send command
+    robot.brain.data.sh = {} if !robot.brain.data.sh
+    enabled = if robot.brain.data.sh["enabled"]? then robot.brain.data.sh["enabled"] else []
 
-    @exec command, (error, stdout, stderr) ->
-      if error?
-        msg.send error
-      else
-        msg.send stdout
+    @wexec = require('child_process').exec
+    command = "#{msg.match[1]}"
+    cmds    = command.split(" ")
+
+    # whichコマンドでコマンドか確認
+    tcmd = command.replace /;/g, " "
+    tcmd = tcmd.replace /&&/g, " "
+    tcmd = tcmd.replace /`/g, " "
+    tcmd = tcmd.replace /\$/g, " "
+    tmcd = tcmd.replace /\=/g, " "
+
+    @wexec "which #{tcmd}", (error, stdout, stderr) ->
+      if stdout.length == 0 then return
+      wrets = stdout.split("\n")
+
+      # コマンドが登録されているか確認
+      for wret in wrets
+        cmd = wret.split("/").pop()
+        unless cmd.length == 0 or enabled.indexOf(cmd) >= 0
+          msg.send "#{cmd}コマンドは許可がありません。"
+          return
+
+      # コマンド実行
+      @exec = require('child_process').exec
+      @exec command, (error, stdout, stderr) ->
+        msg.send "call"
+        if error?
+          msg.send "$ #{command}\n#{error}"
+        else
+          msg.send "$ #{command}\n#{stdout}"
+
+  #
+  # コマンド追加
+  #
+  robot.respond /sh_add (.*)$/i, (msg) ->
+    cmds = msg.match[1].split(" ")
+
+    @exec = require('child_process').exec
+    @exec "which #{msg.match[1]}", (error, stdout, stderr) ->
+
+      # コマンドの最大文字列長を取得
+      maxlen = 0
+      for cmd in cmds
+        maxlen = Math.max(cmd.length, maxlen)
+
+      # 結果文字列生成
+      result = ""
+      lines  = stdout.split("\n")
+
+      # 設定値を取得
+      robot.brain.data.sh = {} if !robot.brain.data.sh
+      enabled = if robot.brain.data.sh["enabled"]? then robot.brain.data.sh["enabled"] else []
+
+      for cmd, i in cmds
+        if cmd.length == 0 then continue
+
+        # 出力を整形
+        cmdname = "#{cmd + Array(maxlen).join ' '}".slice(0, maxlen)
+        if lines[i].split('/').pop() == cmd
+          if enabled.indexOf(cmd) == -1
+            result += "#{cmdname} - [ OK ]\n"
+            enabled.push(cmd)
+          else
+            result += "#{cmdname} - [ OK ] already setting.\n"
+        else
+          result += "#{cmdname} - [ NG ] not installed.\n"
+          i--
+
+      robot.brain.data.sh["enabled"] = enabled
+      robot.brain.save()
+
+      msg.send result
+
+  #
+  # コマンド削除
+  #
+  robot.respond /sh_remove (.*)$/i, (msg) ->
+    result = "remove :\n"
+    robot.brain.data.sh = {} if !robot.brain.data.sh
+    enabled = if robot.brain.data.sh["enabled"]? then robot.brain.data.sh["enabled"] else []
+
+    cmds = msg.match[1].split(" ")
+    for cmd in cmds
+      index = enabled.indexOf(cmd)
+      if index >= 0
+        enabled.splice(index, 1)
+        result += "  #{cmd}\n"
+
+    msg.send result
+
+  #
+  # コマンドリスト
+  #
+  robot.respond /sh_list$/i, (msg) ->
+    result = ""
+    robot.brain.data.sh = {} if !robot.brain.data.sh
+    enabled = if robot.brain.data.sh["enabled"]? then robot.brain.data.sh["enabled"] else []
+    for cmd in enabled
+      result += "#{cmd}\n"
+
+    if result.length == 0
+      result = "ないぼっと"
+    msg.send result
